@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FinancePro - Expense Tracker</title>
 
+    <!-- Favicon -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👛</text></svg>"
+    />
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -175,23 +181,57 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <!-- Balance -->
             <div
-              class="glass p-6 rounded-3xl flex items-center justify-between transition-colors duration-200"
+              class="glass p-6 rounded-3xl flex flex-col transition-colors duration-200 gap-4"
             >
-              <div>
-                <p
-                  class="text-slate-500 dark:text-slate-400 text-sm font-medium"
-                >
-                  Total Balance
-                </p>
-                <h3
-                  id="total-balance"
-                  class="text-2xl font-bold mt-1 dark:text-white privacy-target"
-                >
-                  $0.00
-                </h3>
+              <div class="flex items-center justify-between">
+                <div>
+                  <p
+                    class="text-slate-500 dark:text-slate-400 text-sm font-medium"
+                  >
+                    Total Balance
+                  </p>
+                  <h3
+                    id="total-balance"
+                    class="text-2xl font-bold mt-1 dark:text-white privacy-target"
+                  >
+                    $0.00
+                  </h3>
+                </div>
+                <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                  <i class="ph ph-wallet text-2xl"></i>
+                </div>
               </div>
-              <div class="p-3 rounded-full bg-blue-100 text-blue-600">
-                <i class="ph ph-wallet text-2xl"></i>
+
+              <!-- Debt Summary -->
+              <div
+                class="flex items-center gap-6 pt-2 border-t border-slate-200/50 dark:border-slate-700/50"
+              >
+                <div>
+                  <p
+                    class="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-0.5"
+                  >
+                    I Owe
+                  </p>
+                  <p
+                    id="dashboard-i-owe"
+                    class="text-sm font-bold text-red-500 privacy-target"
+                  >
+                    $0.00
+                  </p>
+                </div>
+                <div>
+                  <p
+                    class="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-0.5"
+                  >
+                    Owed to Me
+                  </p>
+                  <p
+                    id="dashboard-owed-to-me"
+                    class="text-sm font-bold text-green-500 privacy-target"
+                  >
+                    $0.00
+                  </p>
+                </div>
               </div>
             </div>
             <!-- Income -->
@@ -296,23 +336,36 @@
                 <h3 class="text-lg font-bold text-slate-800 dark:text-white">
                   Recent Transactions
                 </h3>
-                <select
-                  id="category-filter"
-                  class="text-sm bg-transparent border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-1.5 text-slate-600 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
-                >
-                  <option value="all">All Categories</option>
-                  <option value="Food">Food</option>
-                  <option value="Transport">Transport</option>
-                  <option value="Utilities">Utilities</option>
-                  <option value="Entertainment">Entertainment</option>
-                  <option value="Health">Health</option>
-                  <option value="Shopping">Shopping</option>
-                  <option value="Housing">Housing</option>
-                  <option value="Education">Education</option>
-                  <option value="Personal">Personal</option>
-                  <option value="Income">Income</option>
-                  <option value="General">General</option>
-                </select>
+                <div class="flex items-center gap-2 w-full sm:w-auto">
+                  <div class="relative w-full sm:w-64">
+                    <i
+                      class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    ></i>
+                    <input
+                      type="text"
+                      id="search-input"
+                      placeholder="Search transactions..."
+                      class="w-full pl-9 pr-4 py-1.5 text-sm bg-transparent border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <select
+                    id="category-filter"
+                    class="text-sm bg-transparent border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-1.5 text-slate-600 dark:text-slate-300 outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Categories</option>
+                    <option value="Food">Food</option>
+                    <option value="Transport">Transport</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Health">Health</option>
+                    <option value="Shopping">Shopping</option>
+                    <option value="Housing">Housing</option>
+                    <option value="Education">Education</option>
+                    <option value="Personal">Personal</option>
+                    <option value="Income">Income</option>
+                    <option value="General">General</option>
+                  </select>
+                </div>
               </div>
               <div
                 id="active-filters"
@@ -576,6 +629,32 @@
           </div>
         </div>
 
+        <!-- AI Settings -->
+        <div
+          class="space-y-4 mb-6 pt-4 border-t border-white/20 dark:border-white/10"
+        >
+          <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            AI Configuration
+          </h4>
+          <div>
+            <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1"
+              >Gemini API Key
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                class="text-blue-500 hover:underline"
+                >(Get Key)</a
+              ></label
+            >
+            <input
+              type="password"
+              id="gemini-api-key"
+              placeholder="Paste API Key here"
+              class="w-full bg-transparent border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-500 dark:text-white"
+            />
+          </div>
+        </div>
+
         <!-- Actions -->
         <div
           class="space-y-3 pt-4 border-t border-white/20 dark:border-white/10"
@@ -755,6 +834,119 @@
               class="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition shadow-lg shadow-blue-500/30 flex items-center gap-2"
             >
               <i class="ph ph-check"></i> Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- EDIT TRANSACTION MODAL -->
+    <div
+      id="edit-modal"
+      class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+    >
+      <div
+        class="glass rounded-3xl shadow-2xl max-w-md w-full p-6 transform transition-all scale-100 max-h-[90vh] overflow-y-auto"
+      >
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-xl font-bold text-slate-800 dark:text-white">
+            Edit Transaction
+          </h3>
+          <button
+            id="close-edit-modal-btn"
+            class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+          >
+            <i class="ph ph-x text-xl"></i>
+          </button>
+        </div>
+        <form id="edit-transaction-form" class="space-y-4">
+          <div>
+            <label
+              class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+              >Date</label
+            >
+            <input
+              type="date"
+              id="edit-date"
+              class="w-full p-2 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white/50 dark:bg-black/20 dark:text-white"
+              required
+            />
+          </div>
+          <div>
+            <label
+              class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+              >Description</label
+            >
+            <input
+              type="text"
+              id="edit-desc"
+              class="w-full p-2 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white/50 dark:bg-black/20 dark:text-white"
+              required
+            />
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+                >Amount</label
+              >
+              <input
+                type="number"
+                step="0.01"
+                id="edit-amount"
+                class="w-full p-2 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white/50 dark:bg-black/20 dark:text-white"
+                required
+              />
+            </div>
+            <div>
+              <label
+                class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+                >Type</label
+              >
+              <select
+                id="edit-type"
+                class="w-full p-2 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white/50 dark:bg-black/20 dark:text-white"
+              >
+                <option value="expense">Expense</option>
+                <option value="income">Income</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label
+              class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+              >Category</label
+            >
+            <select
+              id="edit-category"
+              class="w-full p-2 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white/50 dark:bg-black/20 dark:text-white"
+            >
+              <option value="General">General</option>
+              <option value="Food">Food</option>
+              <option value="Transport">Transport</option>
+              <option value="Utilities">Utilities</option>
+              <option value="Entertainment">Entertainment</option>
+              <option value="Health">Health</option>
+              <option value="Shopping">Shopping</option>
+              <option value="Housing">Housing</option>
+              <option value="Education">Education</option>
+              <option value="Personal">Personal</option>
+              <option value="Income">Income</option>
+            </select>
+          </div>
+          <div class="flex justify-end gap-3 mt-6">
+            <button
+              type="button"
+              id="cancel-edit-modal-btn"
+              class="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10 rounded-xl font-medium transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition shadow-lg shadow-blue-500/30 flex items-center gap-2"
+            >
+              <i class="ph ph-check"></i> Update
             </button>
           </div>
         </form>

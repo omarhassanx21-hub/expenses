@@ -21,7 +21,11 @@ import {
   Timestamp,
   setDoc,
   writeBatch,
+  updateDoc,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// Import Google Generative AI
+import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
 // --- CONFIGURATION ---
 const firebaseConfig = {
@@ -50,6 +54,8 @@ let activeMonthFilter = null;
 let currencySymbol = localStorage.getItem("currency") || "$";
 let isDarkMode = localStorage.getItem("theme") === "dark";
 let currentSort = { column: "date", direction: "desc" };
+let editingTransactionId = null;
+let geminiApiKey = localStorage.getItem("geminiApiKey") || "";
 
 // --- DOM ELEMENTS ---
 const loginScreen = document.getElementById("login-screen");
@@ -78,6 +84,7 @@ const cancelConfirmBtn = document.getElementById("cancel-confirm-btn");
 const confirmActionBtn = document.getElementById("confirm-action-btn");
 const categoryFilter = document.getElementById("category-filter");
 const singleCategory = document.getElementById("single-category");
+const singleDescInput = document.getElementById("single-desc");
 const activeFiltersContainer = document.getElementById("active-filters");
 const privacyBtn = document.getElementById("privacy-btn");
 const openSettingsBtn = document.getElementById("open-settings-btn");
@@ -91,6 +98,15 @@ const dashboardView = document.getElementById("dashboard-view");
 const debtsView = document.getElementById("debts-view");
 const debtsIOweList = document.getElementById("debts-i-owe-list");
 const debtsOwedToMeList = document.getElementById("debts-owed-to-me-list");
+const searchInput = document.getElementById("search-input");
+const editModal = document.getElementById("edit-modal");
+const closeEditModalBtn = document.getElementById("close-edit-modal-btn");
+const cancelEditModalBtn = document.getElementById("cancel-edit-modal-btn");
+const editForm = document.getElementById("edit-transaction-form");
+const aiInsightsBtn = document.getElementById("ai-insights-btn");
+const aiModal = document.getElementById("ai-modal");
+const closeAiModalBtn = document.getElementById("close-ai-modal-btn");
+const geminiApiKeyInput = document.getElementById("gemini-api-key");
 
 // --- AUTHENTICATION ---
 loginBtn.addEventListener("click", async () => {
@@ -130,16 +146,19 @@ onAuthStateChanged(auth, async (user) => {
         const data = docSnap.data();
         if (data.currency) currencySymbol = data.currency;
         if (data.theme) isDarkMode = data.theme === "dark";
+        if (data.geminiApiKey) geminiApiKey = data.geminiApiKey;
 
         // Sync local storage
         localStorage.setItem("currency", currencySymbol);
         localStorage.setItem("theme", isDarkMode ? "dark" : "light");
+        localStorage.setItem("geminiApiKey", geminiApiKey);
       }
     } catch (e) {
       console.error("Error fetching user settings:", e);
     }
 
     // Apply settings to UI controls
+    geminiApiKeyInput.value = geminiApiKey;
     currencySelect.value = currencySymbol;
     applyTheme();
 
@@ -152,6 +171,7 @@ onAuthStateChanged(auth, async (user) => {
         lastLogin: Timestamp.now(),
         currency: currencySymbol,
         theme: isDarkMode ? "dark" : "light",
+        // We don't force save API key here to avoid overwriting if it wasn't fetched yet
       },
       { merge: true },
     );
@@ -183,6 +203,7 @@ privacyBtn.addEventListener("click", () => {
 openSettingsBtn.addEventListener("click", () => {
   settingsModal.classList.remove("hidden");
   currencySelect.value = currencySymbol;
+  geminiApiKeyInput.value = geminiApiKey;
 });
 
 closeSettingsBtn.addEventListener("click", () => {
@@ -213,6 +234,19 @@ themeToggle.addEventListener("click", async () => {
     await setDoc(
       doc(db, "users", currentUser.uid),
       { theme: isDarkMode ? "dark" : "light" },
+      { merge: true },
+    );
+  }
+});
+
+geminiApiKeyInput.addEventListener("change", async (e) => {
+  geminiApiKey = e.target.value.trim();
+  localStorage.setItem("geminiApiKey", geminiApiKey);
+
+  if (currentUser) {
+    await setDoc(
+      doc(db, "users", currentUser.uid),
+      { geminiApiKey: geminiApiKey },
       { merge: true },
     );
   }
@@ -261,6 +295,9 @@ document.querySelectorAll("th[data-sort]").forEach((th) => {
     renderTable();
   });
 });
+
+// --- SEARCH LOGIC ---
+searchInput.addEventListener("input", renderTable);
 
 // --- TAB NAVIGATION ---
 function switchTab(tab) {
@@ -375,6 +412,14 @@ function renderTable() {
     );
   }
 
+  // Filter by Search Term
+  const searchTerm = searchInput.value.toLowerCase();
+  if (searchTerm) {
+    filteredTransactions = filteredTransactions.filter((t) =>
+      t.description.toLowerCase().includes(searchTerm),
+    );
+  }
+
   // Filter by Month (Chart Click)
   if (activeMonthFilter) {
     filteredTransactions = filteredTransactions.filter((t) => {
@@ -481,12 +526,23 @@ function renderTable() {
             </td>
             <td class="px-6 py-3 font-bold ${amountClass} privacy-target">${sign}${currencySymbol}${t.amount.toLocaleString()}</td>
             <td class="px-6 py-3 text-right">
+                <button class="edit-btn text-slate-400 hover:text-blue-500 transition p-1 mr-2" data-id="${t.id}" title="Edit">
+                    <i class="ph ph-pencil-simple text-lg"></i>
+                </button>
                 <button class="delete-btn text-slate-400 hover:text-red-500 transition p-1" data-id="${t.id}" title="Delete">
                     <i class="ph ph-trash text-lg"></i>
                 </button>
             </td>
         `;
     transactionsList.appendChild(row);
+  });
+
+  // Attach edit listeners
+  document.querySelectorAll(".edit-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const id = e.currentTarget.getAttribute("data-id");
+      openEditModal(id);
+    });
   });
 
   // Attach delete listeners
@@ -509,6 +565,64 @@ function renderTable() {
 // Re-render table when filter changes
 categoryFilter.addEventListener("change", renderTable);
 
+// --- EDIT MODAL LOGIC ---
+function openEditModal(id) {
+  const transaction = transactions.find((t) => t.id === id);
+  if (!transaction) return;
+
+  editingTransactionId = id;
+  document.getElementById("edit-desc").value = transaction.description;
+  document.getElementById("edit-amount").value = transaction.amount;
+  document.getElementById("edit-type").value = transaction.type;
+  document.getElementById("edit-category").value =
+    transaction.category || "General";
+
+  // Format date for input
+  const date = transaction.jsDate;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  document.getElementById("edit-date").value = `${year}-${month}-${day}`;
+
+  editModal.classList.remove("hidden");
+}
+
+const closeEditModal = () => editModal.classList.add("hidden");
+closeEditModalBtn.addEventListener("click", closeEditModal);
+cancelEditModalBtn.addEventListener("click", closeEditModal);
+
+editForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentUser || !editingTransactionId) return;
+
+  const dateVal = document.getElementById("edit-date").value;
+  const desc = document.getElementById("edit-desc").value;
+  const amount = parseFloat(document.getElementById("edit-amount").value);
+  const type = document.getElementById("edit-type").value;
+  const category = document.getElementById("edit-category").value;
+
+  const [year, month, day] = dateVal.split("-").map(Number);
+  const dateObj = new Date(year, month - 1, day);
+
+  try {
+    await updateDoc(
+      doc(db, "users", currentUser.uid, "transactions", editingTransactionId),
+      {
+        description: desc,
+        amount: amount,
+        type: type,
+        category: category,
+        date: Timestamp.fromDate(dateObj),
+      },
+    );
+    closeEditModal();
+    showToast("Transaction updated successfully", "success");
+  } catch (error) {
+    console.error("Error updating transaction:", error);
+    showToast("Error updating transaction: " + error.message, "error");
+  }
+});
+
 function renderStats() {
   const income = transactions
     .filter((t) => t.type === "income")
@@ -524,6 +638,62 @@ function renderStats() {
     `${currencySymbol}${income.toLocaleString()}`;
   document.getElementById("total-expense").textContent =
     `${currencySymbol}${expense.toLocaleString()}`;
+
+  // --- Calculate Debt Stats for Dashboard ---
+  const personalTransactions = transactions.filter(
+    (t) => (t.category || "General") === "Personal",
+  );
+  const debtKeywords = [
+    "debt",
+    "loan",
+    "borrow",
+    "lend",
+    "lent",
+    "repay",
+    "return",
+    "owe",
+    "owed",
+  ];
+
+  let iOweTotal = 0;
+  let owedToMeTotal = 0;
+
+  personalTransactions.forEach((t) => {
+    const d = t.description.toLowerCase();
+    if (d.includes("gift") || d.includes("allowence") || d.includes("donation"))
+      return;
+    if (!debtKeywords.some((k) => d.includes(k))) return;
+
+    let isLiability = false;
+    if (t.type === "income") {
+      // Income: Usually "Borrowed from" (Liability) unless "repay" or "back" (Asset repayment)
+      if (d.includes("repay") || d.includes("back") || d.includes("return")) {
+        isLiability = false;
+      } else {
+        isLiability = true;
+      }
+    } else {
+      // Expense: Usually "Lent to" (Asset) unless "paid" or "debt" (Liability repayment)
+      if (d.includes("paid") || d.includes("repay")) {
+        isLiability = true;
+      } else {
+        isLiability = false;
+      }
+    }
+
+    if (isLiability) {
+      if (t.type === "income") iOweTotal += t.amount;
+      else iOweTotal -= t.amount;
+    } else {
+      if (t.type === "expense") owedToMeTotal += t.amount;
+      else owedToMeTotal -= t.amount;
+    }
+  });
+
+  document.getElementById("dashboard-i-owe").textContent =
+    `${currencySymbol}${Math.max(0, iOweTotal).toLocaleString()}`;
+  document.getElementById("dashboard-owed-to-me").textContent =
+    `${currencySymbol}${Math.max(0, owedToMeTotal).toLocaleString()}`;
 }
 
 // --- CHARTS (Chart.js) ---
@@ -556,7 +726,6 @@ function renderCharts() {
 
   // 2. Prepare Category Data (Top Expenses)
   const categoryData = {};
-  transactions;
 
   // Filter transactions for the pie chart if a month is selected
   let categoryTransactions = transactions;
@@ -1113,6 +1282,12 @@ const closeSingleModal = () => singleModal.classList.add("hidden");
 closeSingleModalBtn.addEventListener("click", closeSingleModal);
 cancelSingleModalBtn.addEventListener("click", closeSingleModal);
 
+// Auto-detect category on input
+singleDescInput.addEventListener("input", () => {
+  const category = detectCategory(singleDescInput.value);
+  singleCategory.value = category;
+});
+
 // --- CONFIRMATION MODAL LOGIC ---
 let pendingConfirmAction = null;
 
@@ -1327,3 +1502,64 @@ async function deleteBatchTransactions(list) {
 // Initialize theme on load
 applyTheme();
 updateSortIcons();
+
+// --- AI INSIGHTS LOGIC ---
+const closeAiModal = () => aiModal.classList.add("hidden");
+closeAiModalBtn.addEventListener("click", closeAiModal);
+
+aiInsightsBtn.addEventListener("click", async () => {
+  if (!geminiApiKey) {
+    alert("Please enter your Gemini API Key in Settings first.");
+    openSettingsBtn.click();
+    return;
+  }
+
+  if (transactions.length === 0) {
+    showToast("No transactions to analyze.", "info");
+    return;
+  }
+
+  aiModal.classList.remove("hidden");
+  const contentDiv = document.getElementById("ai-content");
+  contentDiv.innerHTML = `
+    <div class="flex flex-col items-center justify-center py-8 space-y-4">
+      <i class="ph ph-spinner ph-spin text-4xl text-purple-500"></i>
+      <p class="text-slate-500 animate-pulse">Analyzing your finances...</p>
+    </div>
+  `;
+
+  try {
+    // Prepare data (Last 50 transactions to save tokens)
+    const recentTransactions = transactions.slice(0, 50).map((t) => ({
+      date: t.jsDate.toLocaleDateString(),
+      amount: t.amount,
+      type: t.type,
+      category: t.category,
+      description: t.description,
+    }));
+
+    const prompt = `
+      You are a helpful financial advisor. Analyze the following expense data (Currency: ${currencySymbol}):
+      ${JSON.stringify(recentTransactions)}
+
+      Please provide:
+      1. A brief summary of spending habits.
+      2. Identification of the largest spending category.
+      3. Three specific, actionable tips to save money based on this data.
+      
+      Format the output in clean Markdown. Keep it friendly, concise, and professional.
+    `;
+
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    contentDiv.innerHTML = marked.parse(text);
+  } catch (error) {
+    console.error("AI Error:", error);
+    contentDiv.innerHTML = `<div class="text-red-500 p-4 bg-red-50 rounded-xl">Error generating insights: ${error.message}</div>`;
+  }
+});

@@ -24,9 +24,6 @@ import {
   updateDoc,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Import Google Generative AI
-import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
-
 // --- CONFIGURATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyDw2tivlQ2K1yXsymitj3xYRZT3XPdrXq0",
@@ -55,7 +52,6 @@ let currencySymbol = localStorage.getItem("currency") || "$";
 let isDarkMode = localStorage.getItem("theme") === "dark";
 let currentSort = { column: "date", direction: "desc" };
 let editingTransactionId = null;
-let geminiApiKey = localStorage.getItem("geminiApiKey") || "";
 
 // --- DOM ELEMENTS ---
 const loginScreen = document.getElementById("login-screen");
@@ -103,10 +99,6 @@ const editModal = document.getElementById("edit-modal");
 const closeEditModalBtn = document.getElementById("close-edit-modal-btn");
 const cancelEditModalBtn = document.getElementById("cancel-edit-modal-btn");
 const editForm = document.getElementById("edit-transaction-form");
-const tabAi = document.getElementById("tab-ai");
-const aiView = document.getElementById("ai-view");
-const generateAiBtn = document.getElementById("generate-ai-btn");
-const geminiApiKeyInput = document.getElementById("gemini-api-key");
 
 // --- AUTHENTICATION ---
 loginBtn.addEventListener("click", async () => {
@@ -146,19 +138,16 @@ onAuthStateChanged(auth, async (user) => {
         const data = docSnap.data();
         if (data.currency) currencySymbol = data.currency;
         if (data.theme) isDarkMode = data.theme === "dark";
-        if (data.geminiApiKey) geminiApiKey = data.geminiApiKey;
 
         // Sync local storage
         localStorage.setItem("currency", currencySymbol);
         localStorage.setItem("theme", isDarkMode ? "dark" : "light");
-        localStorage.setItem("geminiApiKey", geminiApiKey);
       }
     } catch (e) {
       console.error("Error fetching user settings:", e);
     }
 
     // Apply settings to UI controls
-    geminiApiKeyInput.value = geminiApiKey;
     currencySelect.value = currencySymbol;
     applyTheme();
 
@@ -171,7 +160,6 @@ onAuthStateChanged(auth, async (user) => {
         lastLogin: Timestamp.now(),
         currency: currencySymbol,
         theme: isDarkMode ? "dark" : "light",
-        // We don't force save API key here to avoid overwriting if it wasn't fetched yet
       },
       { merge: true },
     );
@@ -203,7 +191,6 @@ privacyBtn.addEventListener("click", () => {
 openSettingsBtn.addEventListener("click", () => {
   settingsModal.classList.remove("hidden");
   currencySelect.value = currencySymbol;
-  geminiApiKeyInput.value = geminiApiKey;
 });
 
 closeSettingsBtn.addEventListener("click", () => {
@@ -234,24 +221,6 @@ themeToggle.addEventListener("click", async () => {
     await setDoc(
       doc(db, "users", currentUser.uid),
       { theme: isDarkMode ? "dark" : "light" },
-      { merge: true },
-    );
-  }
-});
-
-geminiApiKeyInput.addEventListener("input", (e) => {
-  geminiApiKey = e.target.value.trim();
-  localStorage.setItem("geminiApiKey", geminiApiKey);
-});
-
-geminiApiKeyInput.addEventListener("change", async (e) => {
-  geminiApiKey = e.target.value.trim();
-  localStorage.setItem("geminiApiKey", geminiApiKey);
-
-  if (currentUser) {
-    await setDoc(
-      doc(db, "users", currentUser.uid),
-      { geminiApiKey: geminiApiKey },
       { merge: true },
     );
   }
@@ -309,8 +278,6 @@ function switchTab(tab) {
   if (tab === "dashboard") {
     dashboardView.classList.remove("hidden");
     debtsView.classList.add("hidden");
-    aiView.classList.add("hidden");
-
     tabDashboard.classList.add(
       "border-blue-500",
       "text-blue-600",
@@ -321,25 +288,19 @@ function switchTab(tab) {
       "text-slate-500",
       "dark:text-slate-400",
     );
-
-    // Reset other tabs
-    [tabDebts, tabAi].forEach((t) => {
-      t.classList.remove(
-        "border-blue-500",
-        "text-blue-600",
-        "dark:text-blue-400",
-      );
-      t.classList.add(
-        "border-transparent",
-        "text-slate-500",
-        "dark:text-slate-400",
-      );
-    });
+    tabDebts.classList.remove(
+      "border-blue-500",
+      "text-blue-600",
+      "dark:text-blue-400",
+    );
+    tabDebts.classList.add(
+      "border-transparent",
+      "text-slate-500",
+      "dark:text-slate-400",
+    );
   } else if (tab === "debts") {
     dashboardView.classList.add("hidden");
     debtsView.classList.remove("hidden");
-    aiView.classList.add("hidden");
-
     tabDebts.classList.add(
       "border-blue-500",
       "text-blue-600",
@@ -350,57 +311,22 @@ function switchTab(tab) {
       "text-slate-500",
       "dark:text-slate-400",
     );
-
-    // Reset other tabs
-    [tabDashboard, tabAi].forEach((t) => {
-      t.classList.remove(
-        "border-blue-500",
-        "text-blue-600",
-        "dark:text-blue-400",
-      );
-      t.classList.add(
-        "border-transparent",
-        "text-slate-500",
-        "dark:text-slate-400",
-      );
-    });
-
-    renderDebts();
-  } else if (tab === "ai") {
-    dashboardView.classList.add("hidden");
-    debtsView.classList.add("hidden");
-    aiView.classList.remove("hidden");
-
-    tabAi.classList.add(
+    tabDashboard.classList.remove(
       "border-blue-500",
       "text-blue-600",
       "dark:text-blue-400",
     );
-    tabAi.classList.remove(
+    tabDashboard.classList.add(
       "border-transparent",
       "text-slate-500",
       "dark:text-slate-400",
     );
-
-    // Reset other tabs
-    [tabDashboard, tabDebts].forEach((t) => {
-      t.classList.remove(
-        "border-blue-500",
-        "text-blue-600",
-        "dark:text-blue-400",
-      );
-      t.classList.add(
-        "border-transparent",
-        "text-slate-500",
-        "dark:text-slate-400",
-      );
-    });
+    renderDebts();
   }
 }
 
 tabDashboard.addEventListener("click", () => switchTab("dashboard"));
 tabDebts.addEventListener("click", () => switchTab("debts"));
-tabAi.addEventListener("click", () => switchTab("ai"));
 
 // --- DATABASE LISTENER ---
 let unsubscribe = null;
@@ -701,6 +627,7 @@ function renderStats() {
     "return",
     "owe",
     "owed",
+    "paid back",
   ];
 
   let iOweTotal = 0;
@@ -713,7 +640,13 @@ function renderStats() {
     if (!debtKeywords.some((k) => d.includes(k))) return;
 
     let isLiability = false;
-    if (t.type === "income") {
+
+    // Explicit Keyword Overrides
+    if (d.includes("borrow")) {
+      isLiability = true;
+    } else if (d.includes("lend") || d.includes("lent")) {
+      isLiability = false;
+    } else if (t.type === "income") {
       // Income: Usually "Borrowed from" (Liability) unless "repay" or "back" (Asset repayment)
       if (d.includes("repay") || d.includes("back") || d.includes("return")) {
         isLiability = false;
@@ -966,6 +899,7 @@ function renderDebts() {
     "return",
     "owe",
     "owed",
+    "paid back",
   ];
 
   const debtTransactions = personalTransactions.filter((t) => {
@@ -994,7 +928,12 @@ function renderDebts() {
 
     let isLiability = false;
 
-    if (t.type === "income") {
+    // Explicit Keyword Overrides
+    if (desc.includes("borrow")) {
+      isLiability = true;
+    } else if (desc.includes("lend") || desc.includes("lent")) {
+      isLiability = false;
+    } else if (t.type === "income") {
       // Income: Usually "Borrowed from" (Liability) unless "repay" or "back" (Asset repayment)
       if (
         desc.includes("repay") ||
@@ -1007,7 +946,11 @@ function renderDebts() {
       }
     } else {
       // Expense: Usually "Lent to" (Asset) unless "paid" or "debt" (Liability repayment)
-      if (desc.includes("paid") || desc.includes("repay")) {
+      if (
+        desc.includes("paid") ||
+        desc.includes("repay") ||
+        desc.includes("return")
+      ) {
         isLiability = true; // Liability
       } else {
         isLiability = false; // Asset (Default for expense in Personal: I gave money)
@@ -1241,8 +1184,14 @@ function detectCategory(description) {
     desc.includes("debt") ||
     desc.includes("loan") ||
     desc.includes("borrow") ||
+    desc.includes("lend") ||
+    desc.includes("lent") ||
+    desc.includes("repay") ||
+    desc.includes("owe") ||
     desc.includes("crypto") ||
-    desc.includes("allowence")
+    desc.includes("allowence") ||
+    desc.includes("paid back") ||
+    desc.includes("return")
   )
     return "Personal";
 
@@ -1293,9 +1242,18 @@ function parseBulkText(text) {
     }
 
     if (amount > 0) {
-      const isIncome =
-        desc.toLowerCase().includes("income") ||
-        desc.toLowerCase().includes("salary");
+      const lowerDesc = desc.toLowerCase();
+      let isIncome =
+        lowerDesc.includes("income") || lowerDesc.includes("salary");
+
+      // "Borrow" implies receiving money (Income), unless it's a repayment
+      if (
+        lowerDesc.includes("borrow") &&
+        !lowerDesc.includes("repay") &&
+        !lowerDesc.includes("paid")
+      ) {
+        isIncome = true;
+      }
 
       const category = detectCategory(desc);
 
@@ -1550,70 +1508,3 @@ async function deleteBatchTransactions(list) {
 // Initialize theme on load
 applyTheme();
 updateSortIcons();
-
-// --- AI INSIGHTS LOGIC ---
-generateAiBtn.addEventListener("click", async () => {
-  // Ensure key is grabbed from input if not set yet
-  if (!geminiApiKey && geminiApiKeyInput.value.trim()) {
-    geminiApiKey = geminiApiKeyInput.value.trim();
-    localStorage.setItem("geminiApiKey", geminiApiKey);
-  }
-
-  if (!geminiApiKey) {
-    alert("Please enter your Gemini API Key in Settings first.");
-    openSettingsBtn.click();
-    return;
-  }
-
-  if (transactions.length === 0) {
-    showToast("No transactions to analyze.", "info");
-    return;
-  }
-
-  const contentDiv = document.getElementById("ai-content");
-  contentDiv.innerHTML = `
-    <div class="flex flex-col items-center justify-center py-8 space-y-4">
-      <i class="ph ph-spinner ph-spin text-4xl text-purple-500"></i>
-      <p class="text-slate-500 animate-pulse">Analyzing your finances...</p>
-    </div>
-  `;
-
-  try {
-    // Prepare data (Last 50 transactions to save tokens)
-    const recentTransactions = transactions.slice(0, 50).map((t) => ({
-      date: t.jsDate.toLocaleDateString(),
-      amount: t.amount,
-      type: t.type,
-      category: t.category,
-      description: t.description,
-    }));
-
-    const prompt = `
-      You are a helpful financial advisor. Analyze the following expense data (Currency: ${currencySymbol}):
-      ${JSON.stringify(recentTransactions)}
-
-      Please provide:
-      1. A brief summary of spending habits.
-      2. Identification of the largest spending category.
-      3. Three specific, actionable tips to save money based on this data.
-      
-      Format the output in clean Markdown. Keep it friendly, concise, and professional.
-    `;
-
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    if (typeof marked !== "undefined") {
-      contentDiv.innerHTML = marked.parse(text);
-    } else {
-      contentDiv.innerHTML = text.replace(/\n/g, "<br>");
-    }
-  } catch (error) {
-    console.error("AI Error:", error);
-    contentDiv.innerHTML = `<div class="text-red-500 p-4 bg-red-50 rounded-xl">Error generating insights: ${error.message}</div>`;
-  }
-});

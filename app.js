@@ -103,9 +103,9 @@ const editModal = document.getElementById("edit-modal");
 const closeEditModalBtn = document.getElementById("close-edit-modal-btn");
 const cancelEditModalBtn = document.getElementById("cancel-edit-modal-btn");
 const editForm = document.getElementById("edit-transaction-form");
-const aiInsightsBtn = document.getElementById("ai-insights-btn");
-const aiModal = document.getElementById("ai-modal");
-const closeAiModalBtn = document.getElementById("close-ai-modal-btn");
+const tabAi = document.getElementById("tab-ai");
+const aiView = document.getElementById("ai-view");
+const generateAiBtn = document.getElementById("generate-ai-btn");
 const geminiApiKeyInput = document.getElementById("gemini-api-key");
 
 // --- AUTHENTICATION ---
@@ -239,6 +239,11 @@ themeToggle.addEventListener("click", async () => {
   }
 });
 
+geminiApiKeyInput.addEventListener("input", (e) => {
+  geminiApiKey = e.target.value.trim();
+  localStorage.setItem("geminiApiKey", geminiApiKey);
+});
+
 geminiApiKeyInput.addEventListener("change", async (e) => {
   geminiApiKey = e.target.value.trim();
   localStorage.setItem("geminiApiKey", geminiApiKey);
@@ -304,6 +309,8 @@ function switchTab(tab) {
   if (tab === "dashboard") {
     dashboardView.classList.remove("hidden");
     debtsView.classList.add("hidden");
+    aiView.classList.add("hidden");
+
     tabDashboard.classList.add(
       "border-blue-500",
       "text-blue-600",
@@ -314,19 +321,25 @@ function switchTab(tab) {
       "text-slate-500",
       "dark:text-slate-400",
     );
-    tabDebts.classList.remove(
-      "border-blue-500",
-      "text-blue-600",
-      "dark:text-blue-400",
-    );
-    tabDebts.classList.add(
-      "border-transparent",
-      "text-slate-500",
-      "dark:text-slate-400",
-    );
-  } else {
+
+    // Reset other tabs
+    [tabDebts, tabAi].forEach((t) => {
+      t.classList.remove(
+        "border-blue-500",
+        "text-blue-600",
+        "dark:text-blue-400",
+      );
+      t.classList.add(
+        "border-transparent",
+        "text-slate-500",
+        "dark:text-slate-400",
+      );
+    });
+  } else if (tab === "debts") {
     dashboardView.classList.add("hidden");
     debtsView.classList.remove("hidden");
+    aiView.classList.add("hidden");
+
     tabDebts.classList.add(
       "border-blue-500",
       "text-blue-600",
@@ -337,22 +350,57 @@ function switchTab(tab) {
       "text-slate-500",
       "dark:text-slate-400",
     );
-    tabDashboard.classList.remove(
+
+    // Reset other tabs
+    [tabDashboard, tabAi].forEach((t) => {
+      t.classList.remove(
+        "border-blue-500",
+        "text-blue-600",
+        "dark:text-blue-400",
+      );
+      t.classList.add(
+        "border-transparent",
+        "text-slate-500",
+        "dark:text-slate-400",
+      );
+    });
+
+    renderDebts();
+  } else if (tab === "ai") {
+    dashboardView.classList.add("hidden");
+    debtsView.classList.add("hidden");
+    aiView.classList.remove("hidden");
+
+    tabAi.classList.add(
       "border-blue-500",
       "text-blue-600",
       "dark:text-blue-400",
     );
-    tabDashboard.classList.add(
+    tabAi.classList.remove(
       "border-transparent",
       "text-slate-500",
       "dark:text-slate-400",
     );
-    renderDebts();
+
+    // Reset other tabs
+    [tabDashboard, tabDebts].forEach((t) => {
+      t.classList.remove(
+        "border-blue-500",
+        "text-blue-600",
+        "dark:text-blue-400",
+      );
+      t.classList.add(
+        "border-transparent",
+        "text-slate-500",
+        "dark:text-slate-400",
+      );
+    });
   }
 }
 
 tabDashboard.addEventListener("click", () => switchTab("dashboard"));
 tabDebts.addEventListener("click", () => switchTab("debts"));
+tabAi.addEventListener("click", () => switchTab("ai"));
 
 // --- DATABASE LISTENER ---
 let unsubscribe = null;
@@ -1504,10 +1552,13 @@ applyTheme();
 updateSortIcons();
 
 // --- AI INSIGHTS LOGIC ---
-const closeAiModal = () => aiModal.classList.add("hidden");
-closeAiModalBtn.addEventListener("click", closeAiModal);
+generateAiBtn.addEventListener("click", async () => {
+  // Ensure key is grabbed from input if not set yet
+  if (!geminiApiKey && geminiApiKeyInput.value.trim()) {
+    geminiApiKey = geminiApiKeyInput.value.trim();
+    localStorage.setItem("geminiApiKey", geminiApiKey);
+  }
 
-aiInsightsBtn.addEventListener("click", async () => {
   if (!geminiApiKey) {
     alert("Please enter your Gemini API Key in Settings first.");
     openSettingsBtn.click();
@@ -1519,7 +1570,6 @@ aiInsightsBtn.addEventListener("click", async () => {
     return;
   }
 
-  aiModal.classList.remove("hidden");
   const contentDiv = document.getElementById("ai-content");
   contentDiv.innerHTML = `
     <div class="flex flex-col items-center justify-center py-8 space-y-4">
@@ -1557,7 +1607,11 @@ aiInsightsBtn.addEventListener("click", async () => {
     const response = await result.response;
     const text = response.text();
 
-    contentDiv.innerHTML = marked.parse(text);
+    if (typeof marked !== "undefined") {
+      contentDiv.innerHTML = marked.parse(text);
+    } else {
+      contentDiv.innerHTML = text.replace(/\n/g, "<br>");
+    }
   } catch (error) {
     console.error("AI Error:", error);
     contentDiv.innerHTML = `<div class="text-red-500 p-4 bg-red-50 rounded-xl">Error generating insights: ${error.message}</div>`;

@@ -67,21 +67,13 @@ function calculateDebts(transactions) {
     "lend",
     "lent",
     "repay",
-    "return",
     "owe",
     "owed",
     "paid back",
     "reimburse",
     "settle",
-    "advance",
-    "cover",
-    "spot",
     "repaid",
     "paid me back",
-    "gave",
-    "given",
-    "received",
-    "transfer",
   ];
 
   const debtTransactions = transactions.filter((t) => {
@@ -94,7 +86,10 @@ function calculateDebts(transactions) {
 
     // 2. Include if Category is Personal OR Description contains a keyword
     const isPersonal = c === "Personal";
-    const hasKeyword = debtKeywords.some((k) => d.includes(k));
+    // Use regex for word boundaries to avoid partial matches (e.g. "spot" in "spotify")
+    const hasKeyword = debtKeywords.some((k) =>
+      new RegExp(`\\b${k}\\b`, "i").test(d),
+    );
 
     return isPersonal || hasKeyword;
   });

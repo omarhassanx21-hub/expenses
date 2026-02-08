@@ -2,6 +2,8 @@ import { Timestamp } from "./firebase.js";
 
 export function detectCategory(description) {
   const desc = description.toLowerCase();
+  // Helper for whole word matching (prevents "car" matching "card")
+  const hasWord = (word) => new RegExp(`\\b${word}\\b`, "i").test(desc);
 
   // Income
   if (
@@ -35,7 +37,7 @@ export function detectCategory(description) {
     desc.includes("taxi") ||
     desc.includes("bolt") ||
     desc.includes("lyft") ||
-    desc.includes("bus") ||
+    hasWord("bus") ||
     desc.includes("train") ||
     desc.includes("metro") ||
     desc.includes("flight") ||
@@ -43,7 +45,7 @@ export function detectCategory(description) {
     desc.includes("fuel") ||
     desc.includes("gas") ||
     desc.includes("parking") ||
-    desc.includes("car") ||
+    hasWord("car") ||
     desc.includes("mechanic") ||
     desc.includes("service") ||
     desc.includes("motor") ||
@@ -74,7 +76,7 @@ export function detectCategory(description) {
     desc.includes("touch") ||
     desc.includes("ogero") ||
     desc.includes("subscription") ||
-    desc.includes("sim")
+    hasWord("sim")
   )
     return "Utilities";
 
@@ -88,7 +90,7 @@ export function detectCategory(description) {
     desc.includes("protein") ||
     desc.includes("supplement") ||
     desc.includes("med") ||
-    desc.includes("medicine") ||
+    hasWord("medicine") ||
     desc.includes("pill") ||
     desc.includes("hospital") ||
     desc.includes("dentist") ||
@@ -109,7 +111,7 @@ export function detectCategory(description) {
     desc.includes("course") ||
     desc.includes("book") ||
     desc.includes("paper") ||
-    desc.includes("pen") ||
+    hasWord("pen") ||
     desc.includes("pencil") ||
     desc.includes("stationery") ||
     desc.includes("tuition")
@@ -152,7 +154,7 @@ export function detectCategory(description) {
     desc.includes("m3sl") ||
     desc.includes("shahid") ||
     desc.includes("itunes") ||
-    desc.includes("app") ||
+    hasWord("app") ||
     desc.includes("ps4") ||
     desc.includes("ps5")
   )
@@ -273,12 +275,8 @@ export function detectCategory(description) {
     desc.includes("invest") ||
     desc.includes("allowence") ||
     desc.includes("paid back") ||
-    desc.includes("return") ||
     desc.includes("reimburse") ||
     desc.includes("settle") ||
-    desc.includes("advance") ||
-    desc.includes("cover") ||
-    desc.includes("spot") ||
     desc.includes("repaid") ||
     desc.includes("paid me back")
   )
@@ -362,6 +360,11 @@ export function extractPersonName(description) {
     "rent",
     "subscription",
     "income",
+    "spotify",
+    "netflix",
+    "youtube",
+    "prime",
+    "apple",
   ];
 
   let clean = lower.replace(/[0-9$€£¥]/g, " ").trim();

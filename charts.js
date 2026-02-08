@@ -11,16 +11,41 @@ export function renderCharts() {
 
   // 1. Prepare Monthly Data
   const monthlyData = {};
-  [...transactions].reverse().forEach((t) => {
-    const monthKey = t.jsDate.toLocaleDateString("en-GB", {
-      month: "short",
-      year: "numeric",
+
+  if (transactions.length > 0) {
+    // Robustly find min and max dates regardless of sort order
+    let minDate = transactions[0].jsDate;
+    let maxDate = transactions[0].jsDate;
+
+    transactions.forEach((t) => {
+      if (t.jsDate < minDate) minDate = t.jsDate;
+      if (t.jsDate > maxDate) maxDate = t.jsDate;
     });
-    if (!monthlyData[monthKey])
+
+    const start = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+    const end = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+    const current = new Date(start);
+
+    while (current <= end) {
+      const monthKey = current.toLocaleDateString("en-GB", {
+        month: "short",
+        year: "numeric",
+      });
       monthlyData[monthKey] = { income: 0, expense: 0 };
-    if (t.type === "income") monthlyData[monthKey].income += t.amount;
-    else monthlyData[monthKey].expense += t.amount;
-  });
+      current.setMonth(current.getMonth() + 1);
+    }
+
+    transactions.forEach((t) => {
+      const monthKey = t.jsDate.toLocaleDateString("en-GB", {
+        month: "short",
+        year: "numeric",
+      });
+      if (monthlyData[monthKey]) {
+        if (t.type === "income") monthlyData[monthKey].income += t.amount;
+        else monthlyData[monthKey].expense += t.amount;
+      }
+    });
+  }
 
   const labels = Object.keys(monthlyData);
   const incomeData = labels.map((l) => monthlyData[l].income);

@@ -94,6 +94,7 @@ const dashboardView = document.getElementById("dashboard-view");
 const debtsView = document.getElementById("debts-view");
 const debtsIOweList = document.getElementById("debts-i-owe-list");
 const debtsOwedToMeList = document.getElementById("debts-owed-to-me-list");
+const debtsPeopleList = document.getElementById("debts-people-list");
 const searchInput = document.getElementById("search-input");
 const editModal = document.getElementById("edit-modal");
 const closeEditModalBtn = document.getElementById("close-edit-modal-btn");
@@ -453,6 +454,11 @@ function renderTable() {
     activeFiltersContainer.innerHTML = "";
   }
 
+  // Calculate Total for visible rows
+  const totalVisibleAmount = filteredTransactions.reduce((sum, t) => {
+    return sum + (t.type === "income" ? t.amount : -t.amount);
+  }, 0);
+
   // Sort transactions
   filteredTransactions.sort((a, b) => {
     let valA = a[currentSort.column];
@@ -475,7 +481,9 @@ function renderTable() {
   });
 
   if (filteredTransactions.length === 0) {
-    transactionsList.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-slate-400">No transactions found. Add some!</td></tr>`;
+    const footer = document.getElementById("transactions-footer");
+    if (footer) footer.classList.add("hidden");
+    transactionsList.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400">No transactions found. Add some!</td></tr>`;
     return;
   }
 
@@ -510,6 +518,16 @@ function renderTable() {
         `;
     transactionsList.appendChild(row);
   });
+
+  // Update Footer Total
+  const footer = document.getElementById("transactions-footer");
+  const totalEl = document.getElementById("transactions-total-amount");
+  if (footer && totalEl) {
+    footer.classList.remove("hidden");
+    const isPositive = totalVisibleAmount >= 0;
+    totalEl.textContent = `${isPositive ? "+" : "-"}${currencySymbol}${Math.abs(totalVisibleAmount).toLocaleString()}`;
+    totalEl.className = `px-6 py-3 font-bold privacy-target ${isPositive ? "text-green-600" : "text-red-600"}`;
+  }
 
   // Attach edit listeners
   document.querySelectorAll(".edit-btn").forEach((btn) => {
@@ -628,6 +646,13 @@ function renderStats() {
     "owe",
     "owed",
     "paid back",
+    "reimburse",
+    "settle",
+    "advance",
+    "cover",
+    "spot",
+    "repaid",
+    "paid me back",
   ];
 
   let iOweTotal = 0;
@@ -641,21 +666,30 @@ function renderStats() {
 
     let isLiability = false;
 
-    // Explicit Keyword Overrides
-    if (d.includes("borrow")) {
-      isLiability = true;
-    } else if (d.includes("lend") || d.includes("lent")) {
-      isLiability = false;
-    } else if (t.type === "income") {
+    if (t.type === "income") {
       // Income: Usually "Borrowed from" (Liability) unless "repay" or "back" (Asset repayment)
-      if (d.includes("repay") || d.includes("back") || d.includes("return")) {
+      if (
+        d.includes("repay") ||
+        d.includes("repaid") ||
+        d.includes("back") ||
+        d.includes("return") ||
+        d.includes("reimburse") ||
+        d.includes("settle")
+      ) {
         isLiability = false;
       } else {
         isLiability = true;
       }
     } else {
       // Expense: Usually "Lent to" (Asset) unless "paid" or "debt" (Liability repayment)
-      if (d.includes("paid") || d.includes("repay")) {
+      if (
+        d.includes("repay") ||
+        d.includes("repaid") ||
+        d.includes("return") ||
+        d.includes("settle") ||
+        d.includes("debt") ||
+        d.includes("paid back")
+      ) {
         isLiability = true;
       } else {
         isLiability = false;
@@ -900,6 +934,13 @@ function renderDebts() {
     "owe",
     "owed",
     "paid back",
+    "reimburse",
+    "settle",
+    "advance",
+    "cover",
+    "spot",
+    "repaid",
+    "paid me back",
   ];
 
   const debtTransactions = personalTransactions.filter((t) => {
@@ -917,6 +958,8 @@ function renderDebts() {
 
   debtsIOweList.innerHTML = "";
   debtsOwedToMeList.innerHTML = "";
+  if (debtsPeopleList) debtsPeopleList.innerHTML = "";
+  const peopleStats = {};
 
   debtTransactions.forEach((t) => {
     const desc = t.description.toLowerCase();
@@ -928,17 +971,15 @@ function renderDebts() {
 
     let isLiability = false;
 
-    // Explicit Keyword Overrides
-    if (desc.includes("borrow")) {
-      isLiability = true;
-    } else if (desc.includes("lend") || desc.includes("lent")) {
-      isLiability = false;
-    } else if (t.type === "income") {
+    if (t.type === "income") {
       // Income: Usually "Borrowed from" (Liability) unless "repay" or "back" (Asset repayment)
       if (
         desc.includes("repay") ||
+        desc.includes("repaid") ||
         desc.includes("back") ||
-        desc.includes("return")
+        desc.includes("return") ||
+        desc.includes("reimburse") ||
+        desc.includes("settle")
       ) {
         isLiability = false; // Asset
       } else {
@@ -947,14 +988,36 @@ function renderDebts() {
     } else {
       // Expense: Usually "Lent to" (Asset) unless "paid" or "debt" (Liability repayment)
       if (
-        desc.includes("paid") ||
         desc.includes("repay") ||
-        desc.includes("return")
+        desc.includes("repaid") ||
+        desc.includes("return") ||
+        desc.includes("settle") ||
+        desc.includes("debt") ||
+        (desc.includes("paid") && desc.includes("back"))
       ) {
         isLiability = true; // Liability
       } else {
         isLiability = false; // Asset (Default for expense in Personal: I gave money)
       }
+    }
+
+    // --- Person Grouping Logic ---
+    const person = extractPersonName(t.description);
+    if (!peopleStats[person]) peopleStats[person] = 0;
+
+    // Calculate Net Impact on Balance
+    // Positive = They owe me (Asset)
+    // Negative = I owe them (Liability)
+    if (isLiability) {
+      // Liability Context:
+      // Income (Borrowed) -> I owe more (Negative impact)
+      // Expense (Repaid) -> I owe less (Positive impact)
+      peopleStats[person] += t.type === "income" ? -t.amount : t.amount;
+    } else {
+      // Asset Context:
+      // Expense (Lent) -> They owe more (Positive impact)
+      // Income (Repaid) -> They owe less (Negative impact)
+      peopleStats[person] += t.type === "expense" ? t.amount : -t.amount;
     }
 
     const row = document.createElement("tr");
@@ -988,6 +1051,37 @@ function renderDebts() {
     `${currencySymbol}${Math.max(0, iOweTotal).toLocaleString()}`;
   document.getElementById("total-owed-to-me").textContent =
     `${currencySymbol}${Math.max(0, owedToMeTotal).toLocaleString()}`;
+
+  // Render People Summary
+  Object.entries(peopleStats)
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])) // Sort by magnitude
+    .forEach(([person, balance]) => {
+      if (Math.abs(balance) < 0.01) return; // Hide settled/zero balances
+      if (!debtsPeopleList) return;
+
+      const isOwedToMe = balance > 0;
+      const colorClass = isOwedToMe ? "text-green-600" : "text-red-600";
+      const statusText = isOwedToMe ? "Owes You" : "You Owe";
+      const icon = isOwedToMe
+        ? '<i class="ph ph-arrow-right text-green-500"></i>'
+        : '<i class="ph ph-arrow-left text-red-500"></i>';
+
+      const row = document.createElement("tr");
+      row.className =
+        "border-b border-white/20 dark:border-white/10 last:border-0 hover:bg-white/5 transition";
+      row.innerHTML = `
+        <td class="px-6 py-3 font-medium text-slate-800 dark:text-white">${person}</td>
+        <td class="px-6 py-3 text-right font-bold ${colorClass} privacy-target">
+            ${currencySymbol}${Math.abs(balance).toLocaleString()}
+        </td>
+        <td class="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider ${colorClass}">
+            <div class="flex items-center justify-end gap-1">
+                ${statusText} ${icon}
+            </div>
+        </td>
+    `;
+      debtsPeopleList.appendChild(row);
+    });
 }
 
 // --- TOAST NOTIFICATION SYSTEM ---
@@ -1031,15 +1125,26 @@ function detectCategory(description) {
   if (
     desc.includes("salary") ||
     desc.includes("income") ||
-    desc.includes("tips")
+    desc.includes("deposit") ||
+    desc.includes("freelance") ||
+    desc.includes("dividend") ||
+    desc.includes("interest") ||
+    desc.includes("refund")
   )
     return "Income";
 
+  if (
   // Housing
   if (
     desc.includes("rent") ||
     desc.includes("mortgage") ||
-    desc.includes("house")
+    desc.includes("house") ||
+    desc.includes("apartment") ||
+    desc.includes("maintenance") ||
+    desc.includes("furniture") ||
+    desc.includes("decor") ||
+    desc.includes("plumber") ||
+    desc.includes("electrician")
   )
     return "Housing";
 
@@ -1047,12 +1152,19 @@ function detectCategory(description) {
   if (
     desc.includes("uber") ||
     desc.includes("taxi") ||
+    desc.includes("bolt") ||
+    desc.includes("lyft") ||
     desc.includes("bus") ||
+    desc.includes("train") ||
+    desc.includes("metro") ||
+    desc.includes("flight") ||
+    desc.includes("plane") ||
     desc.includes("fuel") ||
     desc.includes("gas") ||
     desc.includes("parking") ||
     desc.includes("car") ||
     desc.includes("mechanic") ||
+    desc.includes("service") ||
     desc.includes("motor") ||
     desc.includes("bike") ||
     desc.includes("oil") ||
@@ -1079,6 +1191,9 @@ function detectCategory(description) {
     desc.includes("alfa") ||
     desc.includes("mtc") ||
     desc.includes("touch")
+    desc.includes("ogero") ||
+    desc.includes("subscription") ||
+    desc.includes("sim")
   )
     return "Utilities";
 
@@ -1087,10 +1202,19 @@ function detectCategory(description) {
     desc.includes("doctor") ||
     desc.includes("pharmacy") ||
     desc.includes("gym") ||
+    desc.includes("fitness") ||
+    desc.includes("workout") ||
+    desc.includes("protein") ||
+    desc.includes("supplement") ||
     desc.includes("med") ||
+    desc.includes("medicine") ||
+    desc.includes("pill") ||
     desc.includes("hospital") ||
     desc.includes("dentist") ||
+    desc.includes("clinic") ||
     desc.includes("test")
+    desc.includes("blood") ||
+    desc.includes("xray")
   )
     return "Health";
 
@@ -1100,8 +1224,13 @@ function detectCategory(description) {
     desc.includes("udemy") ||
     desc.includes("school") ||
     desc.includes("university") ||
+    desc.includes("college") ||
     desc.includes("course") ||
     desc.includes("book") ||
+    desc.includes("paper") ||
+    desc.includes("pen") ||
+    desc.includes("pencil") ||
+    desc.includes("stationery") ||
     desc.includes("tuition")
   )
     return "Education";
@@ -1111,21 +1240,40 @@ function detectCategory(description) {
     desc.includes("movie") ||
     desc.includes("cinema") ||
     desc.includes("game") ||
+    desc.includes("steam") ||
+    desc.includes("playstation") ||
+    desc.includes("xbox") ||
+    desc.includes("nintendo") ||
     desc.includes("netflix") ||
     desc.includes("spotify") ||
+    desc.includes("music") ||
+    desc.includes("concert") ||
+    desc.includes("event") ||
+    desc.includes("ticket") ||
     desc.includes("youtube") ||
+    desc.includes("hulu") ||
+    desc.includes("disney") ||
     desc.includes("argile") ||
+    desc.includes("shisha") ||
+    desc.includes("hookah") ||
     desc.includes("bowling") ||
     desc.includes("party") ||
     desc.includes("nightclub") ||
+    desc.includes("club") ||
+    desc.includes("bar") ||
+    desc.includes("pub") ||
     desc.includes("billiard") ||
     desc.includes("vape") ||
     desc.includes("smoke") ||
+    desc.includes("cigar") ||
+    desc.includes("cigarette") ||
     desc.includes("iqus") ||
     desc.includes("m3sl") ||
     desc.includes("shahid") ||
     desc.includes("itunes") ||
+    desc.includes("app") ||
     desc.includes("ps4")
+    desc.includes("ps5")
   )
     return "Entertainment";
 
@@ -1133,17 +1281,37 @@ function detectCategory(description) {
   if (
     desc.includes("food") ||
     desc.includes("grocery") ||
+    desc.includes("supermarket") ||
+    desc.includes("market") ||
+    desc.includes("spinneys") ||
+    desc.includes("carrefour") ||
     desc.includes("lunch") ||
     desc.includes("dinner") ||
     desc.includes("coffee") ||
     desc.includes("burger") ||
+    desc.includes("pizza") ||
+    desc.includes("sushi") ||
+    desc.includes("shawarma") ||
+    desc.includes("taouk") ||
+    desc.includes("sandwich") ||
     desc.includes("restaurant") ||
+    desc.includes("delivery") ||
+    desc.includes("toters") ||
     desc.includes("snack") ||
     desc.includes("drink") ||
+    desc.includes("water") ||
+    desc.includes("juice") ||
+    desc.includes("soda") ||
+    desc.includes("pepsi") ||
+    desc.includes("coke") ||
     desc.includes("cocktail") ||
     desc.includes("starbucs") ||
+    desc.includes("starbucks") ||
     desc.includes("breakfast") ||
     desc.includes("cake") ||
+    desc.includes("dessert") ||
+    desc.includes("chocolate") ||
+    desc.includes("ice cream") ||
     desc.includes("donut") ||
     desc.includes("dkan") ||
     desc.includes("cafe")
@@ -1153,26 +1321,46 @@ function detectCategory(description) {
   // Shopping
   if (
     desc.includes("amazon") ||
+    desc.includes("aliexpress") ||
+    desc.includes("shein") ||
+    desc.includes("zara") ||
+    desc.includes("h&m") ||
+    desc.includes("nike") ||
+    desc.includes("adidas") ||
     desc.includes("shop") ||
     desc.includes("store") ||
+    desc.includes("mall") ||
     desc.includes("clothes") ||
     desc.includes("backpack") ||
     desc.includes("charger") ||
     desc.includes("macbook") ||
     desc.includes("iphone") ||
+    desc.includes("samsung") ||
+    desc.includes("phone") ||
     desc.includes("electronics") ||
     desc.includes("airtag") ||
     desc.includes("cap") ||
     desc.includes("wallet") ||
     desc.includes("shoe") ||
     desc.includes("tshirt") ||
+    desc.includes("shirt") ||
+    desc.includes("pants") ||
+    desc.includes("jeans") ||
     desc.includes("suit") ||
     desc.includes("pajama") ||
     desc.includes("bag") ||
     desc.includes("hair") ||
+    desc.includes("cut") ||
+    desc.includes("barber") ||
+    desc.includes("salon") ||
     desc.includes("shampoo") ||
     desc.includes("shave") ||
     desc.includes("tooth") ||
+    desc.includes("soap") ||
+    desc.includes("cream") ||
+    desc.includes("perfume") ||
+    desc.includes("cologne") ||
+    desc.includes("makeup") ||
     desc.includes("deodorant")
   )
     return "Shopping";
@@ -1181,6 +1369,13 @@ function detectCategory(description) {
   if (
     desc.includes("gift") ||
     desc.includes("donation") ||
+    desc.includes("charity") ||
+    desc.includes("family") ||
+    desc.includes("mom") ||
+    desc.includes("dad") ||
+    desc.includes("brother") ||
+    desc.includes("sister") ||
+    desc.includes("friend") ||
     desc.includes("debt") ||
     desc.includes("loan") ||
     desc.includes("borrow") ||
@@ -1189,82 +1384,191 @@ function detectCategory(description) {
     desc.includes("repay") ||
     desc.includes("owe") ||
     desc.includes("crypto") ||
+    desc.includes("bitcoin") ||
+    desc.includes("usdt") ||
+    desc.includes("binance") ||
+    desc.includes("trading") ||
+    desc.includes("stock") ||
+    desc.includes("invest") ||
     desc.includes("allowence") ||
     desc.includes("paid back") ||
-    desc.includes("return")
+    desc.includes("return") ||
+    desc.includes("reimburse") ||
+    desc.includes("settle") ||
+    desc.includes("advance") ||
+    desc.includes("cover") ||
+    desc.includes("spot") ||
+    desc.includes("repaid") ||
+    desc.includes("paid me back")
   )
     return "Personal";
 
   return "General";
 }
 
+// --- HELPER: Extract Person Name ---
+function extractPersonName(description) {
+  const lower = description.toLowerCase();
+  const ignore = [
+    "lent",
+    "lend",
+    "loan",
+    "borrow",
+    "borrowed",
+    "from",
+    "to",
+    "repay",
+    "repaid",
+    "paid",
+    "pay",
+    "back",
+    "return",
+    "returned",
+    "debt",
+    "settle",
+    "settled",
+    "advance",
+    "cover",
+    "spot",
+    "money",
+    "cash",
+    "transfer",
+    "sent",
+    "received",
+    "get",
+    "got",
+    "of",
+    "for",
+    "the",
+    "a",
+    "an",
+    "in",
+    "with",
+    "via",
+    "by",
+    "me",
+    "my",
+    "i",
+    "him",
+    "her",
+    "it",
+    "them",
+    "us",
+    "we",
+    "yesterday",
+    "today",
+    "tomorrow",
+    "last",
+    "week",
+    "month",
+    "year",
+    "dollar",
+    "usd",
+    "lbp",
+    "euro",
+    "amount",
+  ];
+
+  // Remove numbers and currency symbols
+  let clean = lower.replace(/[0-9$€£¥]/g, " ").trim();
+
+  // Split and filter out keywords
+  const words = clean
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && !ignore.includes(w));
+
+  if (words.length === 0) return "Unknown";
+
+  // Capitalize first letter of each word
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
 // --- BULK PARSER LOGIC ---
+function parseTransactionString(text) {
+  let desc = text.trim();
+  let amount = 0;
+  let date = new Date();
+
+  // 1. Extract Date (DD/MM/YYYY or "Yesterday", "Today")
+  const dateRegex = /(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.](\d{2,4}))?/;
+  const dateMatch = desc.match(dateRegex);
+
+  if (dateMatch) {
+    const year = dateMatch[3]
+      ? dateMatch[3].length === 2
+        ? "20" + dateMatch[3]
+        : dateMatch[3]
+      : new Date().getFullYear();
+    date = new Date(year, dateMatch[2] - 1, dateMatch[1]);
+    desc = desc.replace(dateMatch[0], "").trim();
+  } else {
+    const lower = desc.toLowerCase();
+    if (lower.includes("yesterday")) {
+      date.setDate(date.getDate() - 1);
+      desc = desc.replace(/yesterday/i, "").trim();
+    } else if (lower.includes("today")) {
+      desc = desc.replace(/today/i, "").trim();
+    }
+  }
+
+  // 2. Extract Amount
+  // Look for numbers with currency or standalone numbers
+  // Regex: Optional currency, Number (int or float), Optional currency
+  const amountMatch = desc.match(/[\$€£¥]?\s*(\d+(?:\.\d{1,2})?)\s*[\$€£¥]?/);
+  if (amountMatch) {
+    amount = parseFloat(amountMatch[1]);
+    // Remove amount from description
+    desc = desc.replace(amountMatch[0], "").trim();
+  }
+
+  // 3. Clean Description
+  desc = desc.replace(/\s+/g, " ").trim();
+  if (!desc) desc = "Unknown Transaction";
+
+  // 4. Detect Type & Category
+  const lowerDesc = desc.toLowerCase();
+  let isIncome =
+    lowerDesc.includes("income") ||
+    lowerDesc.includes("salary") ||
+    lowerDesc.includes("deposit");
+
+  // Smart Debt/Personal Logic
+  if (
+    lowerDesc.includes("borrow") &&
+    !lowerDesc.includes("repay") &&
+    !lowerDesc.includes("paid")
+  ) {
+    isIncome = true;
+  }
+
+  if (
+    lowerDesc.includes("paid me back") ||
+    lowerDesc.includes("repaid me") ||
+    (lowerDesc.includes("returned") && lowerDesc.includes("me"))
+  ) {
+    isIncome = true;
+  }
+
+  const category = detectCategory(desc);
+
+  return {
+    amount,
+    description: desc,
+    category: isIncome ? "Income" : category,
+    type: isIncome ? "income" : "expense",
+    date: Timestamp.fromDate(date),
+    createdAt: Timestamp.now(),
+  };
+}
+
 function parseBulkText(text) {
   const lines = text.split("\n").filter((line) => line.trim() !== "");
   const results = [];
-  let currentDate = new Date();
-
-  // Regex: DD/MM/YYYY
-  const dateRegex = /(\d{1,2})\/(\d{1,2})\/(\d{4})/;
-
-  // Regex 1: Amount at start (e.g. "10$ lunch")
-  const amountStartRegex = /^[\$]?(\d+(?:\.\d+)?)[\$]?\s*(.*)$/;
-  // Regex 2: Amount at end (e.g. "lunch 10$")
-  const amountEndRegex = /^(.*?)\s*[\$]?(\d+(?:\.\d+)?)[\$]?$/;
 
   lines.forEach((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-
-    // Check Date
-    const dateMatch = trimmed.match(dateRegex);
-    if (dateMatch) {
-      // Create date object (Month is 0-indexed in JS)
-      currentDate = new Date(dateMatch[3], dateMatch[2] - 1, dateMatch[1]);
-      return;
-    }
-
-    let amount = 0;
-    let desc = "";
-
-    // Try Amount Start
-    const startMatch = trimmed.match(amountStartRegex);
-    if (startMatch) {
-      amount = parseFloat(startMatch[1]);
-      desc = startMatch[2].trim();
-    } else {
-      // Try Amount End
-      const endMatch = trimmed.match(amountEndRegex);
-      if (endMatch) {
-        desc = endMatch[1].trim();
-        amount = parseFloat(endMatch[2]);
-      }
-    }
-
-    if (amount > 0) {
-      const lowerDesc = desc.toLowerCase();
-      let isIncome =
-        lowerDesc.includes("income") || lowerDesc.includes("salary");
-
-      // "Borrow" implies receiving money (Income), unless it's a repayment
-      if (
-        lowerDesc.includes("borrow") &&
-        !lowerDesc.includes("repay") &&
-        !lowerDesc.includes("paid")
-      ) {
-        isIncome = true;
-      }
-
-      const category = detectCategory(desc);
-
-      results.push({
-        amount: amount,
-        description: desc,
-        category: isIncome ? "Income" : category,
-        type: isIncome ? "income" : "expense",
-        date: Timestamp.fromDate(currentDate), // Convert to Firestore Timestamp
-        createdAt: Timestamp.now(),
-      });
+    const parsed = parseTransactionString(line);
+    if (parsed.amount > 0) {
+      results.push(parsed);
     }
   });
   return results;
@@ -1292,6 +1596,23 @@ cancelSingleModalBtn.addEventListener("click", closeSingleModal);
 singleDescInput.addEventListener("input", () => {
   const category = detectCategory(singleDescInput.value);
   singleCategory.value = category;
+
+  // Auto-detect Type
+  const desc = singleDescInput.value.toLowerCase();
+  const typeSelect = document.getElementById("single-type");
+
+  // "Borrow" usually means Income (receiving money), unless it's "repaying a borrow" (handled by repay check)
+  if (desc.includes("borrow") && !desc.includes("repay")) {
+    typeSelect.value = "income";
+  } else if (
+    desc.includes("lent") ||
+    desc.includes("repay") ||
+    desc.includes("paid")
+  ) {
+    typeSelect.value = "expense";
+  } else if (desc.includes("paid me back") || desc.includes("repaid me")) {
+    typeSelect.value = "income";
+  }
 });
 
 // --- CONFIRMATION MODAL LOGIC ---

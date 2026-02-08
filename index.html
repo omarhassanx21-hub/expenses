@@ -447,6 +447,21 @@
                 >
                   <!-- JS will populate this -->
                 </tbody>
+                <tfoot
+                  id="transactions-footer"
+                  class="bg-black/5 dark:bg-white/5 font-bold text-slate-800 dark:text-white hidden"
+                >
+                  <tr>
+                    <td class="px-6 py-3 text-right" colspan="4">Total</td>
+                    <td
+                      class="px-6 py-3 privacy-target"
+                      id="transactions-total-amount"
+                    >
+                      0.00
+                    </td>
+                    <td class="px-6 py-3"></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
@@ -454,6 +469,40 @@
 
         <!-- DEBTS VIEW -->
         <div id="debts-view" class="hidden space-y-8 fade-in">
+          <!-- People Overview -->
+          <div class="glass rounded-3xl overflow-hidden">
+            <div
+              class="p-6 border-b border-white/20 dark:border-white/10 bg-blue-50/50 dark:bg-blue-900/20"
+            >
+              <h3
+                class="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2"
+              >
+                <i class="ph ph-users"></i> People Overview
+              </h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                Net balances per person. Green = They owe you. Red = You owe
+                them.
+              </p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm">
+                <thead
+                  class="bg-black/5 dark:bg-white/5 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400"
+                >
+                  <tr>
+                    <th class="px-6 py-3">Person</th>
+                    <th class="px-6 py-3 text-right">Net Balance</th>
+                    <th class="px-6 py-3 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody
+                  id="debts-people-list"
+                  class="divide-y divide-white/20 dark:divide-white/10 text-slate-600 dark:text-slate-300"
+                ></tbody>
+              </table>
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- I Owe (Liabilities) -->
             <div class="glass rounded-3xl overflow-hidden">
